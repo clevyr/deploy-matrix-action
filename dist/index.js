@@ -31967,7 +31967,7 @@ var core = __nccwpck_require__(7484);
 var github = __nccwpck_require__(3228);
 ;// CONCATENATED MODULE: ./node_modules/js-yaml/dist/js-yaml.mjs
 
-/*! js-yaml 4.1.0 https://github.com/nodeca/js-yaml @license MIT */
+/*! js-yaml 4.1.1 https://github.com/nodeca/js-yaml @license MIT */
 function isNothing(subject) {
   return (typeof subject === 'undefined') || (subject === null);
 }
@@ -33178,6 +33178,22 @@ function charFromCodepoint(c) {
   );
 }
 
+// set a property of a literal object, while protecting against prototype pollution,
+// see https://github.com/nodeca/js-yaml/issues/164 for more details
+function setProperty(object, key, value) {
+  // used for this specific key only because Object.defineProperty is slow
+  if (key === '__proto__') {
+    Object.defineProperty(object, key, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: value
+    });
+  } else {
+    object[key] = value;
+  }
+}
+
 var simpleEscapeCheck = new Array(256); // integer, for fast access
 var simpleEscapeMap = new Array(256);
 for (var i = 0; i < 256; i++) {
@@ -33356,7 +33372,7 @@ function mergeMappings(state, destination, source, overridableKeys) {
     key = sourceKeys[index];
 
     if (!_hasOwnProperty$1.call(destination, key)) {
-      destination[key] = source[key];
+      setProperty(destination, key, source[key]);
       overridableKeys[key] = true;
     }
   }
@@ -33416,17 +33432,7 @@ function storeMappingPair(state, _result, overridableKeys, keyTag, keyNode, valu
       throwError(state, 'duplicated mapping key');
     }
 
-    // used for this specific key only because Object.defineProperty is slow
-    if (keyNode === '__proto__') {
-      Object.defineProperty(_result, keyNode, {
-        configurable: true,
-        enumerable: true,
-        writable: true,
-        value: valueNode
-      });
-    } else {
-      _result[keyNode] = valueNode;
-    }
+    setProperty(_result, keyNode, valueNode);
     delete overridableKeys[keyNode];
   }
 
@@ -35815,7 +35821,6 @@ var jsYaml = {
 	safeDump: safeDump
 };
 
-/* harmony default export */ const js_yaml = (jsYaml);
 
 
 // EXTERNAL MODULE: external "path"
@@ -37670,7 +37675,7 @@ const matchPatterns = (ref, patterns) => {
  * @return {*}
  */
 const parseDynamicList = (s) => {
-  const parsed = js_yaml.load(s);
+  const parsed = jsYaml.load(s);
   if (typeof parsed === "string") {
     return s.split(/[,|;\n]/);
   }
@@ -37685,7 +37690,7 @@ const parseDynamicList = (s) => {
 
 
 try {
-  const envs = js_yaml.load(core.getInput("envs"));
+  const envs = jsYaml.load(core.getInput("envs"));
   const jobs = parseDynamicList(core.getInput("jobs"));
   const matrix = { include: [] };
 
@@ -37760,7 +37765,7 @@ try {
   }
   core.startGroup("Generated matrix");
   core.info(`Matched ${count} envs`);
-  core.info(js_yaml.dump(matrix));
+  core.info(jsYaml.dump(matrix));
   core.endGroup();
 
   core.setOutput("count", count);
