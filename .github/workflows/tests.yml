@@ -93,7 +93,7 @@ jobs:
         id: changelog
         uses: gabe565/changelog-generator@v1
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
           body: ${{ steps.changelog.outputs.changelog }}
       - uses: nowactions/update-majorver@v1
