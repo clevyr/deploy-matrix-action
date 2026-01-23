@@ -30,7 +30,7 @@
   "devDependencies": {
     "@eslint/js": "9.39.2",
     "@jest/globals": "29.7.0",
-    "@vercel/ncc": "0.38.3",
+    "@vercel/ncc": "0.38.4",
     "eslint": "9.39.2",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-prettier": "5.5.5",
