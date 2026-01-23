@@ -22,7 +22,7 @@
   "homepage": "https://github.com/clevyr/deploy-matrix-action#readme",
   "dependencies": {
     "@actions/core": "1.11.1",
-    "@actions/github": "6.0.0",
+    "@actions/github": "7.0.0",
     "@octokit/webhooks-definitions": "3.67.3",
     "js-yaml": "4.1.0",
     "minimatch": "10.0.1"
