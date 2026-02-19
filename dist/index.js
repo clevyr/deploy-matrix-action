@@ -7115,75 +7115,6 @@ var request = withDefaults(import_endpoint.endpoint, {
 
 /***/ }),
 
-/***/ 9380:
-/***/ ((module) => {
-
-
-module.exports = balanced;
-function balanced(a, b, str) {
-  if (a instanceof RegExp) a = maybeMatch(a, str);
-  if (b instanceof RegExp) b = maybeMatch(b, str);
-
-  var r = range(a, b, str);
-
-  return r && {
-    start: r[0],
-    end: r[1],
-    pre: str.slice(0, r[0]),
-    body: str.slice(r[0] + a.length, r[1]),
-    post: str.slice(r[1] + b.length)
-  };
-}
-
-function maybeMatch(reg, str) {
-  var m = str.match(reg);
-  return m ? m[0] : null;
-}
-
-balanced.range = range;
-function range(a, b, str) {
-  var begs, beg, left, right, result;
-  var ai = str.indexOf(a);
-  var bi = str.indexOf(b, ai + 1);
-  var i = ai;
-
-  if (ai >= 0 && bi > 0) {
-    if(a===b) {
-      return [ai, bi];
-    }
-    begs = [];
-    left = str.length;
-
-    while (i >= 0 && !result) {
-      if (i == ai) {
-        begs.push(i);
-        ai = str.indexOf(a, i + 1);
-      } else if (begs.length == 1) {
-        result = [ begs.pop(), bi ];
-      } else {
-        beg = begs.pop();
-        if (beg < left) {
-          left = beg;
-          right = bi;
-        }
-
-        bi = str.indexOf(b, i + 1);
-      }
-
-      i = ai < bi && ai >= 0 ? ai : bi;
-    }
-
-    if (begs.length) {
-      result = [ left, right ];
-    }
-  }
-
-  return result;
-}
-
-
-/***/ }),
-
 /***/ 2732:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -7361,216 +7292,6 @@ function removeHook(state, name, method) {
 
   state.registry[name].splice(index, 1);
 }
-
-
-/***/ }),
-
-/***/ 4691:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-var balanced = __nccwpck_require__(9380);
-
-module.exports = expandTop;
-
-var escSlash = '\0SLASH'+Math.random()+'\0';
-var escOpen = '\0OPEN'+Math.random()+'\0';
-var escClose = '\0CLOSE'+Math.random()+'\0';
-var escComma = '\0COMMA'+Math.random()+'\0';
-var escPeriod = '\0PERIOD'+Math.random()+'\0';
-
-function numeric(str) {
-  return parseInt(str, 10) == str
-    ? parseInt(str, 10)
-    : str.charCodeAt(0);
-}
-
-function escapeBraces(str) {
-  return str.split('\\\\').join(escSlash)
-            .split('\\{').join(escOpen)
-            .split('\\}').join(escClose)
-            .split('\\,').join(escComma)
-            .split('\\.').join(escPeriod);
-}
-
-function unescapeBraces(str) {
-  return str.split(escSlash).join('\\')
-            .split(escOpen).join('{')
-            .split(escClose).join('}')
-            .split(escComma).join(',')
-            .split(escPeriod).join('.');
-}
-
-
-// Basically just str.split(","), but handling cases
-// where we have nested braced sections, which should be
-// treated as individual members, like {a,{b,c},d}
-function parseCommaParts(str) {
-  if (!str)
-    return [''];
-
-  var parts = [];
-  var m = balanced('{', '}', str);
-
-  if (!m)
-    return str.split(',');
-
-  var pre = m.pre;
-  var body = m.body;
-  var post = m.post;
-  var p = pre.split(',');
-
-  p[p.length-1] += '{' + body + '}';
-  var postParts = parseCommaParts(post);
-  if (post.length) {
-    p[p.length-1] += postParts.shift();
-    p.push.apply(p, postParts);
-  }
-
-  parts.push.apply(parts, p);
-
-  return parts;
-}
-
-function expandTop(str) {
-  if (!str)
-    return [];
-
-  // I don't know why Bash 4.3 does this, but it does.
-  // Anything starting with {} will have the first two bytes preserved
-  // but *only* at the top level, so {},a}b will not expand to anything,
-  // but a{},b}c will be expanded to [a}c,abc].
-  // One could argue that this is a bug in Bash, but since the goal of
-  // this module is to match Bash's rules, we escape a leading {}
-  if (str.substr(0, 2) === '{}') {
-    str = '\\{\\}' + str.substr(2);
-  }
-
-  return expand(escapeBraces(str), true).map(unescapeBraces);
-}
-
-function embrace(str) {
-  return '{' + str + '}';
-}
-function isPadded(el) {
-  return /^-?0\d/.test(el);
-}
-
-function lte(i, y) {
-  return i <= y;
-}
-function gte(i, y) {
-  return i >= y;
-}
-
-function expand(str, isTop) {
-  var expansions = [];
-
-  var m = balanced('{', '}', str);
-  if (!m) return [str];
-
-  // no need to expand pre, since it is guaranteed to be free of brace-sets
-  var pre = m.pre;
-  var post = m.post.length
-    ? expand(m.post, false)
-    : [''];
-
-  if (/\$$/.test(m.pre)) {    
-    for (var k = 0; k < post.length; k++) {
-      var expansion = pre+ '{' + m.body + '}' + post[k];
-      expansions.push(expansion);
-    }
-  } else {
-    var isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
-    var isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
-    var isSequence = isNumericSequence || isAlphaSequence;
-    var isOptions = m.body.indexOf(',') >= 0;
-    if (!isSequence && !isOptions) {
-      // {a},b}
-      if (m.post.match(/,.*\}/)) {
-        str = m.pre + '{' + m.body + escClose + m.post;
-        return expand(str);
-      }
-      return [str];
-    }
-
-    var n;
-    if (isSequence) {
-      n = m.body.split(/\.\./);
-    } else {
-      n = parseCommaParts(m.body);
-      if (n.length === 1) {
-        // x{{a,b}}y ==> x{a}y x{b}y
-        n = expand(n[0], false).map(embrace);
-        if (n.length === 1) {
-          return post.map(function(p) {
-            return m.pre + n[0] + p;
-          });
-        }
-      }
-    }
-
-    // at this point, n is the parts, and we know it's not a comma set
-    // with a single entry.
-    var N;
-
-    if (isSequence) {
-      var x = numeric(n[0]);
-      var y = numeric(n[1]);
-      var width = Math.max(n[0].length, n[1].length)
-      var incr = n.length == 3
-        ? Math.abs(numeric(n[2]))
-        : 1;
-      var test = lte;
-      var reverse = y < x;
-      if (reverse) {
-        incr *= -1;
-        test = gte;
-      }
-      var pad = n.some(isPadded);
-
-      N = [];
-
-      for (var i = x; test(i, y); i += incr) {
-        var c;
-        if (isAlphaSequence) {
-          c = String.fromCharCode(i);
-          if (c === '\\')
-            c = '';
-        } else {
-          c = String(i);
-          if (pad) {
-            var need = width - c.length;
-            if (need > 0) {
-              var z = new Array(need + 1).join('0');
-              if (i < 0)
-                c = '-' + z + c.slice(1);
-              else
-                c = z + c;
-            }
-          }
-        }
-        N.push(c);
-      }
-    } else {
-      N = [];
-
-      for (var j = 0; j < n.length; j++) {
-        N.push.apply(N, expand(n[j], false));
-      }
-    }
-
-    for (var j = 0; j < N.length; j++) {
-      for (var k = 0; k < post.length; k++) {
-        var expansion = pre + N[j] + post[k];
-        if (!isTop || isSequence || expansion)
-          expansions.push(expansion);
-      }
-    }
-  }
-
-  return expansions;
-}
-
 
 
 /***/ }),
@@ -35820,8 +35541,257 @@ var jsYaml = {
 
 // EXTERNAL MODULE: external "path"
 var external_path_ = __nccwpck_require__(6928);
-// EXTERNAL MODULE: ./node_modules/brace-expansion/index.js
-var brace_expansion = __nccwpck_require__(4691);
+;// CONCATENATED MODULE: ./node_modules/brace-expansion/node_modules/balanced-match/dist/esm/index.js
+const balanced = (a, b, str) => {
+    const ma = a instanceof RegExp ? maybeMatch(a, str) : a;
+    const mb = b instanceof RegExp ? maybeMatch(b, str) : b;
+    const r = ma !== null && mb != null && range(ma, mb, str);
+    return (r && {
+        start: r[0],
+        end: r[1],
+        pre: str.slice(0, r[0]),
+        body: str.slice(r[0] + ma.length, r[1]),
+        post: str.slice(r[1] + mb.length),
+    });
+};
+const maybeMatch = (reg, str) => {
+    const m = str.match(reg);
+    return m ? m[0] : null;
+};
+const range = (a, b, str) => {
+    let begs, beg, left, right = undefined, result;
+    let ai = str.indexOf(a);
+    let bi = str.indexOf(b, ai + 1);
+    let i = ai;
+    if (ai >= 0 && bi > 0) {
+        if (a === b) {
+            return [ai, bi];
+        }
+        begs = [];
+        left = str.length;
+        while (i >= 0 && !result) {
+            if (i === ai) {
+                begs.push(i);
+                ai = str.indexOf(a, i + 1);
+            }
+            else if (begs.length === 1) {
+                const r = begs.pop();
+                if (r !== undefined)
+                    result = [r, bi];
+            }
+            else {
+                beg = begs.pop();
+                if (beg !== undefined && beg < left) {
+                    left = beg;
+                    right = bi;
+                }
+                bi = str.indexOf(b, i + 1);
+            }
+            i = ai < bi && ai >= 0 ? ai : bi;
+        }
+        if (begs.length && right !== undefined) {
+            result = [left, right];
+        }
+    }
+    return result;
+};
+//# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: ./node_modules/brace-expansion/dist/esm/index.js
+
+const escSlash = '\0SLASH' + Math.random() + '\0';
+const escOpen = '\0OPEN' + Math.random() + '\0';
+const escClose = '\0CLOSE' + Math.random() + '\0';
+const escComma = '\0COMMA' + Math.random() + '\0';
+const escPeriod = '\0PERIOD' + Math.random() + '\0';
+const escSlashPattern = new RegExp(escSlash, 'g');
+const escOpenPattern = new RegExp(escOpen, 'g');
+const escClosePattern = new RegExp(escClose, 'g');
+const escCommaPattern = new RegExp(escComma, 'g');
+const escPeriodPattern = new RegExp(escPeriod, 'g');
+const slashPattern = /\\\\/g;
+const openPattern = /\\{/g;
+const closePattern = /\\}/g;
+const commaPattern = /\\,/g;
+const periodPattern = /\\./g;
+const EXPANSION_MAX = 100_000;
+function numeric(str) {
+    return !isNaN(str) ? parseInt(str, 10) : str.charCodeAt(0);
+}
+function escapeBraces(str) {
+    return str
+        .replace(slashPattern, escSlash)
+        .replace(openPattern, escOpen)
+        .replace(closePattern, escClose)
+        .replace(commaPattern, escComma)
+        .replace(periodPattern, escPeriod);
+}
+function unescapeBraces(str) {
+    return str
+        .replace(escSlashPattern, '\\')
+        .replace(escOpenPattern, '{')
+        .replace(escClosePattern, '}')
+        .replace(escCommaPattern, ',')
+        .replace(escPeriodPattern, '.');
+}
+/**
+ * Basically just str.split(","), but handling cases
+ * where we have nested braced sections, which should be
+ * treated as individual members, like {a,{b,c},d}
+ */
+function parseCommaParts(str) {
+    if (!str) {
+        return [''];
+    }
+    const parts = [];
+    const m = balanced('{', '}', str);
+    if (!m) {
+        return str.split(',');
+    }
+    const { pre, body, post } = m;
+    const p = pre.split(',');
+    p[p.length - 1] += '{' + body + '}';
+    const postParts = parseCommaParts(post);
+    if (post.length) {
+        ;
+        p[p.length - 1] += postParts.shift();
+        p.push.apply(p, postParts);
+    }
+    parts.push.apply(parts, p);
+    return parts;
+}
+function expand(str, options = {}) {
+    if (!str) {
+        return [];
+    }
+    const { max = EXPANSION_MAX } = options;
+    // I don't know why Bash 4.3 does this, but it does.
+    // Anything starting with {} will have the first two bytes preserved
+    // but *only* at the top level, so {},a}b will not expand to anything,
+    // but a{},b}c will be expanded to [a}c,abc].
+    // One could argue that this is a bug in Bash, but since the goal of
+    // this module is to match Bash's rules, we escape a leading {}
+    if (str.slice(0, 2) === '{}') {
+        str = '\\{\\}' + str.slice(2);
+    }
+    return expand_(escapeBraces(str), max, true).map(unescapeBraces);
+}
+function embrace(str) {
+    return '{' + str + '}';
+}
+function isPadded(el) {
+    return /^-?0\d/.test(el);
+}
+function lte(i, y) {
+    return i <= y;
+}
+function gte(i, y) {
+    return i >= y;
+}
+function expand_(str, max, isTop) {
+    /** @type {string[]} */
+    const expansions = [];
+    const m = balanced('{', '}', str);
+    if (!m)
+        return [str];
+    // no need to expand pre, since it is guaranteed to be free of brace-sets
+    const pre = m.pre;
+    const post = m.post.length ? expand_(m.post, max, false) : [''];
+    if (/\$$/.test(m.pre)) {
+        for (let k = 0; k < post.length && k < max; k++) {
+            const expansion = pre + '{' + m.body + '}' + post[k];
+            expansions.push(expansion);
+        }
+    }
+    else {
+        const isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
+        const isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
+        const isSequence = isNumericSequence || isAlphaSequence;
+        const isOptions = m.body.indexOf(',') >= 0;
+        if (!isSequence && !isOptions) {
+            // {a},b}
+            if (m.post.match(/,(?!,).*\}/)) {
+                str = m.pre + '{' + m.body + escClose + m.post;
+                return expand_(str, max, true);
+            }
+            return [str];
+        }
+        let n;
+        if (isSequence) {
+            n = m.body.split(/\.\./);
+        }
+        else {
+            n = parseCommaParts(m.body);
+            if (n.length === 1 && n[0] !== undefined) {
+                // x{{a,b}}y ==> x{a}y x{b}y
+                n = expand_(n[0], max, false).map(embrace);
+                //XXX is this necessary? Can't seem to hit it in tests.
+                /* c8 ignore start */
+                if (n.length === 1) {
+                    return post.map(p => m.pre + n[0] + p);
+                }
+                /* c8 ignore stop */
+            }
+        }
+        // at this point, n is the parts, and we know it's not a comma set
+        // with a single entry.
+        let N;
+        if (isSequence && n[0] !== undefined && n[1] !== undefined) {
+            const x = numeric(n[0]);
+            const y = numeric(n[1]);
+            const width = Math.max(n[0].length, n[1].length);
+            let incr = n.length === 3 && n[2] !== undefined ? Math.abs(numeric(n[2])) : 1;
+            let test = lte;
+            const reverse = y < x;
+            if (reverse) {
+                incr *= -1;
+                test = gte;
+            }
+            const pad = n.some(isPadded);
+            N = [];
+            for (let i = x; test(i, y); i += incr) {
+                let c;
+                if (isAlphaSequence) {
+                    c = String.fromCharCode(i);
+                    if (c === '\\') {
+                        c = '';
+                    }
+                }
+                else {
+                    c = String(i);
+                    if (pad) {
+                        const need = width - c.length;
+                        if (need > 0) {
+                            const z = new Array(need + 1).join('0');
+                            if (i < 0) {
+                                c = '-' + z + c.slice(1);
+                            }
+                            else {
+                                c = z + c;
+                            }
+                        }
+                    }
+                }
+                N.push(c);
+            }
+        }
+        else {
+            N = [];
+            for (let j = 0; j < n.length; j++) {
+                N.push.apply(N, expand_(n[j], max, false));
+            }
+        }
+        for (let j = 0; j < N.length; j++) {
+            for (let k = 0; k < post.length && expansions.length < max; k++) {
+                const expansion = pre + N[j] + post[k];
+                if (!isTop || isSequence || expansion) {
+                    expansions.push(expansion);
+                }
+            }
+        }
+    }
+    return expansions;
+}
+//# sourceMappingURL=index.js.map
 ;// CONCATENATED MODULE: ./node_modules/minimatch/dist/esm/assert-valid-pattern.js
 const MAX_PATTERN_LENGTH = 1024 * 64;
 const assertValidPattern = (pattern) => {
@@ -35974,10 +35944,8 @@ const parseClass = (glob, position) => {
     }
     const sranges = '[' + (negate ? '^' : '') + rangesToString(ranges) + ']';
     const snegs = '[' + (negate ? '' : '^') + rangesToString(negs) + ']';
-    const comb = ranges.length && negs.length
-        ? '(' + sranges + '|' + snegs + ')'
-        : ranges.length
-            ? sranges
+    const comb = ranges.length && negs.length ? '(' + sranges + '|' + snegs + ')'
+        : ranges.length ? sranges
             : snegs;
     return [comb, uflag, endPos - pos, true];
 };
@@ -35986,21 +35954,35 @@ const parseClass = (glob, position) => {
 /**
  * Un-escape a string that has been escaped with {@link escape}.
  *
- * If the {@link windowsPathsNoEscape} option is used, then square-brace
- * escapes are removed, but not backslash escapes.  For example, it will turn
- * the string `'[*]'` into `*`, but it will not turn `'\\*'` into `'*'`,
- * becuase `\` is a path separator in `windowsPathsNoEscape` mode.
+ * If the {@link MinimatchOptions.windowsPathsNoEscape} option is used, then
+ * square-bracket escapes are removed, but not backslash escapes.
  *
- * When `windowsPathsNoEscape` is not set, then both brace escapes and
+ * For example, it will turn the string `'[*]'` into `*`, but it will not
+ * turn `'\\*'` into `'*'`, because `\` is a path separator in
+ * `windowsPathsNoEscape` mode.
+ *
+ * When `windowsPathsNoEscape` is not set, then both square-bracket escapes and
  * backslash escapes are removed.
  *
  * Slashes (and backslashes in `windowsPathsNoEscape` mode) cannot be escaped
  * or unescaped.
+ *
+ * When `magicalBraces` is not set, escapes of braces (`{` and `}`) will not be
+ * unescaped.
  */
-const unescape_unescape = (s, { windowsPathsNoEscape = false, } = {}) => {
-    return windowsPathsNoEscape
-        ? s.replace(/\[([^\/\\])\]/g, '$1')
-        : s.replace(/((?!\\).|^)\[([^\/\\])\]/g, '$1$2').replace(/\\([^\/])/g, '$1');
+const unescape_unescape = (s, { windowsPathsNoEscape = false, magicalBraces = true, } = {}) => {
+    if (magicalBraces) {
+        return windowsPathsNoEscape ?
+            s.replace(/\[([^\/\\])\]/g, '$1')
+            : s
+                .replace(/((?!\\).|^)\[([^\/\\])\]/g, '$1$2')
+                .replace(/\\([^\/])/g, '$1');
+    }
+    return windowsPathsNoEscape ?
+        s.replace(/\[([^\/\\{}])\]/g, '$1')
+        : s
+            .replace(/((?!\\).|^)\[([^\/\\{}])\]/g, '$1$2')
+            .replace(/\\([^\/{}])/g, '$1');
 };
 //# sourceMappingURL=unescape.js.map
 ;// CONCATENATED MODULE: ./node_modules/minimatch/dist/esm/ast.js
@@ -36125,7 +36107,8 @@ class AST {
             if (p === '')
                 continue;
             /* c8 ignore start */
-            if (typeof p !== 'string' && !(p instanceof AST && p.#parent === this)) {
+            if (typeof p !== 'string' &&
+                !(p instanceof AST && p.#parent === this)) {
                 throw new Error('invalid part: ' + p);
             }
             /* c8 ignore stop */
@@ -36133,8 +36116,10 @@ class AST {
         }
     }
     toJSON() {
-        const ret = this.type === null
-            ? this.#parts.slice().map(p => (typeof p === 'string' ? p : p.toJSON()))
+        const ret = this.type === null ?
+            this.#parts
+                .slice()
+                .map(p => (typeof p === 'string' ? p : p.toJSON()))
             : [this.type, ...this.#parts.map(p => p.toJSON())];
         if (this.isStart() && !this.type)
             ret.unshift([]);
@@ -36418,11 +36403,13 @@ class AST {
         if (this.#root === this)
             this.#fillNegs();
         if (!this.type) {
-            const noEmpty = this.isStart() && this.isEnd();
+            const noEmpty = this.isStart() &&
+                this.isEnd() &&
+                !this.#parts.some(s => typeof s !== 'string');
             const src = this.#parts
                 .map(p => {
-                const [re, _, hasMagic, uflag] = typeof p === 'string'
-                    ? AST.#parseGlob(p, this.#hasMagic, noEmpty)
+                const [re, _, hasMagic, uflag] = typeof p === 'string' ?
+                    AST.#parseGlob(p, this.#hasMagic, noEmpty)
                     : p.toRegExpSource(allowDot);
                 this.#hasMagic = this.#hasMagic || hasMagic;
                 this.#uflag = this.#uflag || uflag;
@@ -36451,7 +36438,10 @@ class AST {
                         // no need to prevent dots if it can't match a dot, or if a
                         // sub-pattern will be preventing it anyway.
                         const needNoDot = !dot && !allowDot && aps.has(src.charAt(0));
-                        start = needNoTrav ? startNoTraversal : needNoDot ? startNoDot : '';
+                        start =
+                            needNoTrav ? startNoTraversal
+                                : needNoDot ? startNoDot
+                                    : '';
                     }
                 }
             }
@@ -36487,8 +36477,8 @@ class AST {
             return [s, unescape_unescape(this.toString()), false, false];
         }
         // XXX abstract out this map method
-        let bodyDotAllowed = !repeated || allowDot || dot || !startNoDot
-            ? ''
+        let bodyDotAllowed = !repeated || allowDot || dot || !startNoDot ?
+            ''
             : this.#partsToRegExp(true);
         if (bodyDotAllowed === body) {
             bodyDotAllowed = '';
@@ -36502,20 +36492,16 @@ class AST {
             final = (this.isStart() && !dot ? startNoDot : '') + starNoEmpty;
         }
         else {
-            const close = this.type === '!'
-                ? // !() must match something,but !(x) can match ''
-                    '))' +
-                        (this.isStart() && !dot && !allowDot ? startNoDot : '') +
-                        star +
-                        ')'
-                : this.type === '@'
-                    ? ')'
-                    : this.type === '?'
-                        ? ')?'
-                        : this.type === '+' && bodyDotAllowed
-                            ? ')'
-                            : this.type === '*' && bodyDotAllowed
-                                ? `)?`
+            const close = this.type === '!' ?
+                // !() must match something,but !(x) can match ''
+                '))' +
+                    (this.isStart() && !dot && !allowDot ? startNoDot : '') +
+                    star +
+                    ')'
+                : this.type === '@' ? ')'
+                    : this.type === '?' ? ')?'
+                        : this.type === '+' && bodyDotAllowed ? ')'
+                            : this.type === '*' && bodyDotAllowed ? `)?`
                                 : `)${this.type}`;
             final = start + body + close;
         }
@@ -36547,12 +36533,25 @@ class AST {
         let escaping = false;
         let re = '';
         let uflag = false;
+        // multiple stars that aren't globstars coalesce into one *
+        let inStar = false;
         for (let i = 0; i < glob.length; i++) {
             const c = glob.charAt(i);
             if (escaping) {
                 escaping = false;
                 re += (reSpecials.has(c) ? '\\' : '') + c;
                 continue;
+            }
+            if (c === '*') {
+                if (inStar)
+                    continue;
+                inStar = true;
+                re += noEmpty && /^[*]+$/.test(glob) ? starNoEmpty : star;
+                hasMagic = true;
+                continue;
+            }
+            else {
+                inStar = false;
             }
             if (c === '\\') {
                 if (i === glob.length - 1) {
@@ -36573,14 +36572,6 @@ class AST {
                     continue;
                 }
             }
-            if (c === '*') {
-                if (noEmpty && glob === '*')
-                    re += starNoEmpty;
-                else
-                    re += star;
-                hasMagic = true;
-                continue;
-            }
             if (c === '?') {
                 re += qmark;
                 hasMagic = true;
@@ -36596,18 +36587,26 @@ class AST {
 /**
  * Escape all magic characters in a glob pattern.
  *
- * If the {@link windowsPathsNoEscape | GlobOptions.windowsPathsNoEscape}
+ * If the {@link MinimatchOptions.windowsPathsNoEscape}
  * option is used, then characters are escaped by wrapping in `[]`, because
  * a magic character wrapped in a character class can only be satisfied by
  * that exact character.  In this mode, `\` is _not_ escaped, because it is
  * not interpreted as a magic character, but instead as a path separator.
+ *
+ * If the {@link MinimatchOptions.magicalBraces} option is used,
+ * then braces (`{` and `}`) will be escaped.
  */
-const escape_escape = (s, { windowsPathsNoEscape = false, } = {}) => {
+const escape_escape = (s, { windowsPathsNoEscape = false, magicalBraces = false, } = {}) => {
     // don't need to escape +@! because we escape the parens
     // that make those magic, and escaping ! as [!] isn't valid,
     // because [!]] is a valid glob class meaning not ']'.
-    return windowsPathsNoEscape
-        ? s.replace(/[?*()[\]]/g, '[$&]')
+    if (magicalBraces) {
+        return windowsPathsNoEscape ?
+            s.replace(/[?*()[\]{}]/g, '[$&]')
+            : s.replace(/[?*()[\]\\{}]/g, '\\$&');
+    }
+    return windowsPathsNoEscape ?
+        s.replace(/[?*()[\]]/g, '[$&]')
         : s.replace(/[?*()[\]\\]/g, '\\$&');
 };
 //# sourceMappingURL=escape.js.map
@@ -36677,8 +36676,8 @@ const qmarksTestNoExtDot = ([$0]) => {
     return (f) => f.length === len && f !== '.' && f !== '..';
 };
 /* c8 ignore start */
-const defaultPlatform = (typeof process === 'object' && process
-    ? (typeof process.env === 'object' &&
+const defaultPlatform = (typeof process === 'object' && process ?
+    (typeof process.env === 'object' &&
         process.env &&
         process.env.__MINIMATCH_TESTING_PLATFORM__) ||
         process.platform
@@ -36762,7 +36761,7 @@ const braceExpand = (pattern, options = {}) => {
         // shortcut. no need to expand.
         return [pattern];
     }
-    return brace_expansion(pattern);
+    return expand(pattern, { max: options.braceExpandMax });
 };
 minimatch.braceExpand = braceExpand;
 // parse a component of the expanded set.
@@ -36815,8 +36814,10 @@ class Minimatch {
         this.pattern = pattern;
         this.platform = options.platform || defaultPlatform;
         this.isWindows = this.platform === 'win32';
+        // avoid the annoying deprecation flag lol
+        const awe = ('allowWindow' + 'sEscape');
         this.windowsPathsNoEscape =
-            !!options.windowsPathsNoEscape || options.allowWindowsEscape === false;
+            !!options.windowsPathsNoEscape || options[awe] === false;
         if (this.windowsPathsNoEscape) {
             this.pattern = this.pattern.replace(/\\/g, '/');
         }
@@ -36829,8 +36830,8 @@ class Minimatch {
         this.partial = !!options.partial;
         this.nocase = !!this.options.nocase;
         this.windowsNoMagicRoot =
-            options.windowsNoMagicRoot !== undefined
-                ? options.windowsNoMagicRoot
+            options.windowsNoMagicRoot !== undefined ?
+                options.windowsNoMagicRoot
                 : !!(this.isWindows && this.nocase);
         this.globSet = [];
         this.globParts = [];
@@ -36893,7 +36894,10 @@ class Minimatch {
                     !globMagic.test(s[3]);
                 const isDrive = /^[a-z]:/i.test(s[0]);
                 if (isUNC) {
-                    return [...s.slice(0, 4), ...s.slice(4).map(ss => this.parse(ss))];
+                    return [
+                        ...s.slice(0, 4),
+                        ...s.slice(4).map(ss => this.parse(ss)),
+                    ];
                 }
                 else if (isDrive) {
                     return [s[0], ...s.slice(1).map(ss => this.parse(ss))];
@@ -36925,7 +36929,7 @@ class Minimatch {
     // to the right as possible, even if it increases the number
     // of patterns that we have to process.
     preprocess(globParts) {
-        // if we're not in globstar mode, then turn all ** into *
+        // if we're not in globstar mode, then turn ** into *
         if (this.options.noglobstar) {
             for (let i = 0; i < globParts.length; i++) {
                 for (let j = 0; j < globParts[i].length; j++) {
@@ -37229,10 +37233,17 @@ class Minimatch {
                 pattern[2] === '?' &&
                 typeof pattern[3] === 'string' &&
                 /^[a-z]:$/i.test(pattern[3]);
-            const fdi = fileUNC ? 3 : fileDrive ? 0 : undefined;
-            const pdi = patternUNC ? 3 : patternDrive ? 0 : undefined;
+            const fdi = fileUNC ? 3
+                : fileDrive ? 0
+                    : undefined;
+            const pdi = patternUNC ? 3
+                : patternDrive ? 0
+                    : undefined;
             if (typeof fdi === 'number' && typeof pdi === 'number') {
-                const [fd, pd] = [file[fdi], pattern[pdi]];
+                const [fd, pd] = [
+                    file[fdi],
+                    pattern[pdi],
+                ];
                 if (fd.toLowerCase() === pd.toLowerCase()) {
                     pattern[pdi] = fd;
                     if (pdi > fdi) {
@@ -37245,7 +37256,7 @@ class Minimatch {
             }
         }
         // resolve and reduce . and .. portions in the file as well.
-        // dont' need to do the second phase, because it's only one string[]
+        // don't need to do the second phase, because it's only one string[]
         const { optimizationLevel = 1 } = this.options;
         if (optimizationLevel >= 2) {
             file = this.levelTwoFileOptimize(file);
@@ -37413,21 +37424,19 @@ class Minimatch {
             fastTest = options.dot ? starTestDot : starTest;
         }
         else if ((m = pattern.match(starDotExtRE))) {
-            fastTest = (options.nocase
-                ? options.dot
-                    ? starDotExtTestNocaseDot
+            fastTest = (options.nocase ?
+                options.dot ?
+                    starDotExtTestNocaseDot
                     : starDotExtTestNocase
-                : options.dot
-                    ? starDotExtTestDot
+                : options.dot ? starDotExtTestDot
                     : starDotExtTest)(m[1]);
         }
         else if ((m = pattern.match(qmarksRE))) {
-            fastTest = (options.nocase
-                ? options.dot
-                    ? qmarksTestNocaseDot
+            fastTest = (options.nocase ?
+                options.dot ?
+                    qmarksTestNocaseDot
                     : qmarksTestNocase
-                : options.dot
-                    ? qmarksTestDot
+                : options.dot ? qmarksTestDot
                     : qmarksTest)(m);
         }
         else if ((m = pattern.match(starDotStarRE))) {
@@ -37458,10 +37467,8 @@ class Minimatch {
             return this.regexp;
         }
         const options = this.options;
-        const twoStar = options.noglobstar
-            ? esm_star
-            : options.dot
-                ? twoStarDot
+        const twoStar = options.noglobstar ? esm_star
+            : options.dot ? twoStarDot
                 : twoStarNoDot;
         const flags = new Set(options.nocase ? ['i'] : []);
         // regexpify non-globstar patterns
@@ -37477,11 +37484,9 @@ class Minimatch {
                     for (const f of p.flags.split(''))
                         flags.add(f);
                 }
-                return typeof p === 'string'
-                    ? esm_regExpEscape(p)
-                    : p === GLOBSTAR
-                        ? GLOBSTAR
-                        : p._src;
+                return (typeof p === 'string' ? esm_regExpEscape(p)
+                    : p === GLOBSTAR ? GLOBSTAR
+                        : p._src);
             });
             pp.forEach((p, i) => {
                 const next = pp[i + 1];
@@ -37498,14 +37503,25 @@ class Minimatch {
                     }
                 }
                 else if (next === undefined) {
-                    pp[i - 1] = prev + '(?:\\/|' + twoStar + ')?';
+                    pp[i - 1] = prev + '(?:\\/|\\/' + twoStar + ')?';
                 }
                 else if (next !== GLOBSTAR) {
                     pp[i - 1] = prev + '(?:\\/|\\/' + twoStar + '\\/)' + next;
                     pp[i + 1] = GLOBSTAR;
                 }
             });
-            return pp.filter(p => p !== GLOBSTAR).join('/');
+            const filtered = pp.filter(p => p !== GLOBSTAR);
+            // For partial matches, we need to make the pattern match
+            // any prefix of the full path. We do this by generating
+            // alternative patterns that match progressively longer prefixes.
+            if (this.partial && filtered.length >= 1) {
+                const prefixes = [];
+                for (let i = 1; i <= filtered.length; i++) {
+                    prefixes.push(filtered.slice(0, i).join('/'));
+                }
+                return '(?:' + prefixes.join('|') + ')';
+            }
+            return filtered.join('/');
         })
             .join('|');
         // need to wrap in parens if we had more than one thing with |,
@@ -37514,6 +37530,10 @@ class Minimatch {
         // must match entire pattern
         // ending in a * or ** will make it less strict.
         re = '^' + open + re + close + '$';
+        // In partial mode, '/' should always match as it's a valid prefix for any pattern
+        if (this.partial) {
+            re = '^(?:\\/|' + open + re.slice(1, -1) + close + ')$';
+        }
         // can match anything, as long as it's not this.
         if (this.negate)
             re = '^(?!' + re + ').+$';
